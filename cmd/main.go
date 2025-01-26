@@ -66,5 +66,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	graph.PrintRoutes()
+	graph.BuildTravelTimeMatrix()
+	graph.PrintShortestRoutes()
 }

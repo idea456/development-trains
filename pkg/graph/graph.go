@@ -37,7 +37,7 @@ type Graph struct {
 	Routes           map[StationId]map[StationId]*Route
 	Deliveries       []Package
 	Trains           []Train
-	TravelTimeMatrix [][]int
+	TravelTimeMatrix map[StationId]map[StationId]int
 }
 
 func NewGraph(stationNames []string, rawRoutes []string, rawDeliveries []string, rawTrains []string) (*Graph, error) {
@@ -142,10 +142,52 @@ func (g *Graph) PrintRoutes() {
 	}
 }
 
-// func (g *Graph) BuildTravelTimeMatrix() {
-// 	travelTimeMatrix := make(map[StationId]map[StationId]int, 0)
+func (g *Graph) PrintShortestRoutes() {
+	for startionStationId, startingStation := range g.TravelTimeMatrix {
+		startingStationName := g.StationNames[startionStationId]
+		for endingStationId, travelTime := range startingStation {
+			if travelTime != 9999 {
+				endingStationName := g.StationNames[endingStationId]
+				fmt.Printf("Station %s to %s: %d minutes\n", startingStationName, endingStationName, travelTime)
+			}
+		}
+	}
+}
 
-// 	// Run Floyd-Warshall to get all-pairs shortest path first for all stations
-// 	// Can do this as well for the packages
+func (g *Graph) BuildTravelTimeMatrix() {
+	// Run Floyd-Warshall to get all-pairs shortest path first for all stations
+	travelTimeMatrix := make(map[StationId]map[StationId]int, 0)
 
-// }
+	// for startingStation := range travelTimeMatrix {
+	// 	travelTimeMatrix[startingStation] = make(map[StationId]int, 0)
+	// }
+
+	// initialise base cases, A-A, B-B travel time is 0 minutes
+	for stationId := range g.Stations {
+		travelTimeMatrix[stationId] = make(map[StationId]int, 0)
+		// if _, exists := travelTimeMatrix[stationId]; !exists {
+		// 	travelTimeMatrix[stationId] = make(map[StationId]int, 0)
+		// }
+		for adjacentStationId := range g.Stations {
+			if existingRoute, exists := g.Routes[stationId][adjacentStationId]; exists {
+				fmt.Println("got")
+				travelTimeMatrix[stationId][adjacentStationId] = existingRoute.TravelTime
+			} else {
+				travelTimeMatrix[stationId][adjacentStationId] = 9999
+			}
+		}
+		travelTimeMatrix[stationId][stationId] = 0
+	}
+
+	for kStation := range g.Stations {
+		for iStation := range g.Stations {
+			for jStation := range g.Stations {
+				if travelTimeMatrix[iStation][jStation] > travelTimeMatrix[iStation][kStation]+travelTimeMatrix[kStation][jStation] {
+					travelTimeMatrix[iStation][jStation] = travelTimeMatrix[iStation][kStation] + travelTimeMatrix[kStation][jStation]
+				}
+			}
+		}
+	}
+
+	g.TravelTimeMatrix = travelTimeMatrix
+}
