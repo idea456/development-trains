@@ -8,6 +8,7 @@ import (
 )
 
 type StationId = int
+type PackageName = string
 
 // // to represent Infinity in integer format
 // const MaxUint = ^uint(0)
@@ -18,18 +19,20 @@ type Train struct {
 	Capacity          int
 	StartingStationId StationId
 	CurrentStationId  StationId
+	PackagesCarried   []*Package
 }
 
 type Package struct {
-	Name              string
+	Name              PackageName
 	Weight            int
 	StartingStationId StationId
 	EndingStationId   StationId
 }
 
 type Station struct {
-	Id   StationId
-	Name string
+	Id                StationId
+	Name              string
+	PotentialPackages map[PackageName]*Package
 }
 
 type Route struct {
@@ -138,6 +141,7 @@ func NewGraph(stationNames []string, rawRoutes []string, rawDeliveries []string,
 			Capacity:          capacity,
 			StartingStationId: startingStationId,
 			CurrentStationId:  startingStationId,
+			PackagesCarried:   make([]*Package, 0),
 		})
 	}
 
@@ -209,7 +213,7 @@ func (g *Graph) BuildTravelTimeMatrix() {
 					travelTimeMatrix[jStation][iStation] = travelTimeMatrix[iStation][kStation] + travelTimeMatrix[kStation][jStation]
 
 					travelPathMatrix[iStation][jStation] = travelPathMatrix[kStation][jStation]
-					travelPathMatrix[jStation][iStation] = travelPathMatrix[kStation][jStation]
+					travelPathMatrix[jStation][iStation] = travelPathMatrix[jStation][kStation]
 				}
 			}
 		}
@@ -239,10 +243,11 @@ func (g *Graph) Deliver() {
 	undeliveredPackages := make([]Package, 0)
 	undeliveredPackages = append(undeliveredPackages, g.Deliveries...)
 
+	assignedTrains := make([]Train, 0)
 	unassignedTrains := make([]Train, 0)
 	unassignedTrains = append(unassignedTrains, g.Trains...)
 
-	for len(undeliveredPackages) > 0 {
+	for len(assignedTrains) <= len(unassignedTrains) {
 		// undeliveredPackage, _ := undeliveredPackages[0], undeliveredPackages[1:]
 		train := unassignedTrains[0]
 
@@ -258,7 +263,7 @@ func (g *Graph) Deliver() {
 				continue
 			}
 
-			currentTravelTimeToPickupPackage := g.TravelTimeMatrix[train.CurrentStationId][undeliveredPackage.EndingStationId]
+			currentTravelTimeToPickupPackage := g.TravelTimeMatrix[train.CurrentStationId][undeliveredPackage.StartingStationId]
 			nearestTravelTimeToPickupPackage := g.TravelTimeMatrix[nearestPackage.StartingStationId][train.CurrentStationId]
 			if currentTravelTimeToPickupPackage < nearestTravelTimeToPickupPackage {
 				nearestPackage = &undeliveredPackage
@@ -274,7 +279,8 @@ func (g *Graph) Deliver() {
 		if nearestPackage == nil {
 			// NOTE: this train cannot pick up anymore packages, might be too heavy or its already filled with pickups
 			// TODO: Handle this case
-			return
+			unassignedTrains = unassignedTrains[1:]
+			continue
 		}
 
 		fmt.Println("delivering...", train.CurrentStationId, nearestPackage.StartingStationId)
@@ -282,7 +288,27 @@ func (g *Graph) Deliver() {
 
 		unassignedTrains[0].CurrentStationId = nearestPackage.StartingStationId
 		unassignedTrains[0].Capacity = train.Capacity - nearestPackage.Weight
+		unassignedTrains[0].PackagesCarried = append(unassignedTrains[0].PackagesCarried, nearestPackage)
+
+		var isAdded bool
+		for j := 0; j < len(assignedTrains); j++ {
+			if assignedTrains[j].Name == train.Name {
+				isAdded = true
+				assignedTrains[j].CurrentStationId = nearestPackage.StartingStationId
+				assignedTrains[j].Capacity = train.Capacity - nearestPackage.Weight
+				assignedTrains[j].PackagesCarried = append(assignedTrains[j].PackagesCarried, nearestPackage)
+				break
+			}
+		}
+		if !isAdded {
+			assignedTrains = append(assignedTrains, unassignedTrains[0])
+		}
 
 		undeliveredPackages = append(undeliveredPackages[:nearestPackageIndex], undeliveredPackages[nearestPackageIndex+1:]...)
 	}
+
+	// at this point, all packages should have been picked up by some trains
+	// now we can deliver them to their destinations!
+	// NOTE: But we could have some other pakcages that has not been assigned yet, so we need the trains to drop them first :(
+	fmt.Println(assignedTrains)
 }
