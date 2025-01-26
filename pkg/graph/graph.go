@@ -64,7 +64,19 @@ func NewGraph(stationNames []string, rawRoutes []string, rawDeliveries []string,
 			return nil, fmt.Errorf("Route %s is not in integer format", routeName)
 		}
 
+		if _, exists := routes[fromStation]; !exists {
+			routes[fromStation] = make(map[int]*Route, 0)
+		}
+		if _, exists := routes[toStation]; !exists {
+			routes[toStation] = make(map[int]*Route, 0)
+		}
+
+		// bidirectional
 		routes[fromStation][toStation] = &Route{
+			Name:       routeName,
+			TravelTime: travelTime,
+		}
+		routes[toStation][fromStation] = &Route{
 			Name:       routeName,
 			TravelTime: travelTime,
 		}
@@ -120,8 +132,18 @@ func NewGraph(stationNames []string, rawRoutes []string, rawDeliveries []string,
 	}, nil
 }
 
+func (g *Graph) PrintRoutes() {
+	for startionStationId, startingStation := range g.Routes {
+		startingStationName := g.StationNames[startionStationId]
+		for endingStationId, route := range startingStation {
+			endingStationName := g.StationNames[endingStationId]
+			fmt.Printf("Station %s to %s: route %s with %d minutes\n", startingStationName, endingStationName, route.Name, route.TravelTime)
+		}
+	}
+}
+
 // func (g *Graph) BuildTravelTimeMatrix() {
-// 	travelTimeMatrix := make(map[string]map[string]int, 0)
+// 	travelTimeMatrix := make(map[StationId]map[StationId]int, 0)
 
 // 	// Run Floyd-Warshall to get all-pairs shortest path first for all stations
 // 	// Can do this as well for the packages
