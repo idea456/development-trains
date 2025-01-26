@@ -188,6 +188,12 @@ func (g *Graph) BuildTravelTimeMatrix() {
 
 			if existingRoute, exists := g.Routes[stationId][adjacentStationId]; exists {
 				travelTimeMatrix[stationId][adjacentStationId] = existingRoute.TravelTime
+
+				travelPathMatrix[stationId][adjacentStationId] = stationId
+				if _, exists := travelPathMatrix[adjacentStationId]; !exists {
+					travelPathMatrix[adjacentStationId] = make(map[StationId]StationId, 0)
+				}
+				travelPathMatrix[adjacentStationId][stationId] = adjacentStationId
 			} else {
 				travelTimeMatrix[stationId][adjacentStationId] = MaxInt
 			}
@@ -203,6 +209,7 @@ func (g *Graph) BuildTravelTimeMatrix() {
 					travelTimeMatrix[jStation][iStation] = travelTimeMatrix[iStation][kStation] + travelTimeMatrix[kStation][jStation]
 
 					travelPathMatrix[iStation][jStation] = travelPathMatrix[kStation][jStation]
+					travelPathMatrix[jStation][iStation] = travelPathMatrix[kStation][jStation]
 				}
 			}
 		}
@@ -212,7 +219,7 @@ func (g *Graph) BuildTravelTimeMatrix() {
 	g.TravelPathMatrix = travelPathMatrix
 }
 
-func (g *Graph) MoveToStation(fromStationId StationId, toStationId StationId) {
+func (g *Graph) MoveToStation(train *Train, fromStationId StationId, toStationId StationId) {
 	paths := make([]string, 0)
 
 	start := fromStationId
@@ -224,6 +231,7 @@ func (g *Graph) MoveToStation(fromStationId StationId, toStationId StationId) {
 	paths = append(paths, g.StationNames[start])
 
 	slices.Reverse(paths)
+	fmt.Println("for train", train.Name)
 	fmt.Println(paths)
 }
 
@@ -231,38 +239,50 @@ func (g *Graph) Deliver() {
 	undeliveredPackages := make([]Package, 0)
 	undeliveredPackages = append(undeliveredPackages, g.Deliveries...)
 
-	for len(undeliveredPackages) > 0 {
-		undeliveredPackage, _ := undeliveredPackages[0], undeliveredPackages[1:]
+	unassignedTrains := make([]Train, 0)
+	unassignedTrains = append(unassignedTrains, g.Trains...)
 
-		// find the nearest train to pickup this current package
-		var nearestTrain *Train
-		for _, train := range g.Trains {
-			// cannot pickup the package, too heavy
-			if train.Capacity > undeliveredPackage.Weight {
+	for len(undeliveredPackages) > 0 {
+		// undeliveredPackage, _ := undeliveredPackages[0], undeliveredPackages[1:]
+		train := unassignedTrains[0]
+
+		var nearestPackage *Package
+		var nearestPackageIndex int
+		for i, undeliveredPackage := range undeliveredPackages {
+			if undeliveredPackage.Weight > train.Capacity {
 				continue
 			}
-			if nearestTrain == nil {
-				nearestTrain = &train
+
+			if nearestPackage == nil {
+				nearestPackage = &undeliveredPackage
 				continue
 			}
 
 			currentTravelTimeToPickupPackage := g.TravelTimeMatrix[train.CurrentStationId][undeliveredPackage.EndingStationId]
-			nearestTravelTimeToPickupPackage := g.TravelTimeMatrix[nearestTrain.CurrentStationId][undeliveredPackage.EndingStationId]
+			nearestTravelTimeToPickupPackage := g.TravelTimeMatrix[nearestPackage.StartingStationId][train.CurrentStationId]
 			if currentTravelTimeToPickupPackage < nearestTravelTimeToPickupPackage {
-				nearestTrain = &train
+				nearestPackage = &undeliveredPackage
+				nearestPackageIndex = i
 			} else if currentTravelTimeToPickupPackage == nearestTravelTimeToPickupPackage {
-				// TODO: There are 2 nearest trains that can pickup the package
-				nearestTrain = &train
+				// NOTE: There are 2 nearest trains that can pickup the package
+				// TODO: Handle this case
+				nearestPackage = &undeliveredPackage
+				nearestPackageIndex = i
 			}
 		}
 
-		if nearestTrain == nil {
-			// TODO: no train can pick up this package, might be too heavy
+		if nearestPackage == nil {
+			// NOTE: this train cannot pick up anymore packages, might be too heavy or its already filled with pickups
+			// TODO: Handle this case
 			return
 		}
 
-		fmt.Println("delivering...")
-		g.MoveToStation(nearestTrain.StartingStationId, undeliveredPackage.EndingStationId)
-		return
+		fmt.Println("delivering...", train.CurrentStationId, nearestPackage.StartingStationId)
+		g.MoveToStation(&train, train.CurrentStationId, nearestPackage.StartingStationId)
+
+		unassignedTrains[0].CurrentStationId = nearestPackage.StartingStationId
+		unassignedTrains[0].Capacity = train.Capacity - nearestPackage.Weight
+
+		undeliveredPackages = append(undeliveredPackages[:nearestPackageIndex], undeliveredPackages[nearestPackageIndex+1:]...)
 	}
 }
