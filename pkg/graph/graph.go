@@ -2,16 +2,22 @@ package graph
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 )
 
 type StationId = int
 
+// // to represent Infinity in integer format
+// const MaxUint = ^uint(0)
+const MaxInt = 999999
+
 type Train struct {
 	Name              string
 	Capacity          int
 	StartingStationId StationId
+	CurrentStationId  StationId
 }
 
 type Package struct {
@@ -31,6 +37,15 @@ type Route struct {
 	TravelTime int
 }
 
+type Move struct {
+	StartedSeconds  int
+	Train           Train
+	StartingStation Station
+	PickedPackages  []Package
+	EndingStation   Station
+	DroppedPackages Package
+}
+
 type Graph struct {
 	Stations         map[StationId]*Station
 	StationNames     map[StationId]string
@@ -38,6 +53,8 @@ type Graph struct {
 	Deliveries       []Package
 	Trains           []Train
 	TravelTimeMatrix map[StationId]map[StationId]int
+	TravelPathMatrix map[StationId]map[StationId]StationId
+	Moves            []Move
 }
 
 func NewGraph(stationNames []string, rawRoutes []string, rawDeliveries []string, rawTrains []string) (*Graph, error) {
@@ -120,6 +137,7 @@ func NewGraph(stationNames []string, rawRoutes []string, rawDeliveries []string,
 			Name:              trainName,
 			Capacity:          capacity,
 			StartingStationId: startingStationId,
+			CurrentStationId:  startingStationId,
 		})
 	}
 
@@ -129,6 +147,7 @@ func NewGraph(stationNames []string, rawRoutes []string, rawDeliveries []string,
 		Routes:       routes,
 		Deliveries:   deliveries,
 		Trains:       trains,
+		Moves:        make([]Move, 0),
 	}, nil
 }
 
@@ -146,7 +165,7 @@ func (g *Graph) PrintShortestRoutes() {
 	for startionStationId, startingStation := range g.TravelTimeMatrix {
 		startingStationName := g.StationNames[startionStationId]
 		for endingStationId, travelTime := range startingStation {
-			if travelTime != 9999 {
+			if travelTime != MaxInt {
 				endingStationName := g.StationNames[endingStationId]
 				fmt.Printf("Station %s to %s: %d minutes\n", startingStationName, endingStationName, travelTime)
 			}
@@ -157,23 +176,20 @@ func (g *Graph) PrintShortestRoutes() {
 func (g *Graph) BuildTravelTimeMatrix() {
 	// Run Floyd-Warshall to get all-pairs shortest path first for all stations
 	travelTimeMatrix := make(map[StationId]map[StationId]int, 0)
-
-	// for startingStation := range travelTimeMatrix {
-	// 	travelTimeMatrix[startingStation] = make(map[StationId]int, 0)
-	// }
+	travelPathMatrix := make(map[StationId]map[StationId]StationId, 0)
 
 	// initialise base cases, A-A, B-B travel time is 0 minutes
 	for stationId := range g.Stations {
 		travelTimeMatrix[stationId] = make(map[StationId]int, 0)
-		// if _, exists := travelTimeMatrix[stationId]; !exists {
-		// 	travelTimeMatrix[stationId] = make(map[StationId]int, 0)
-		// }
+		travelPathMatrix[stationId] = make(map[StationId]StationId, 0)
+
 		for adjacentStationId := range g.Stations {
+			travelPathMatrix[stationId][adjacentStationId] = -1
+
 			if existingRoute, exists := g.Routes[stationId][adjacentStationId]; exists {
-				fmt.Println("got")
 				travelTimeMatrix[stationId][adjacentStationId] = existingRoute.TravelTime
 			} else {
-				travelTimeMatrix[stationId][adjacentStationId] = 9999
+				travelTimeMatrix[stationId][adjacentStationId] = MaxInt
 			}
 		}
 		travelTimeMatrix[stationId][stationId] = 0
@@ -184,10 +200,69 @@ func (g *Graph) BuildTravelTimeMatrix() {
 			for jStation := range g.Stations {
 				if travelTimeMatrix[iStation][jStation] > travelTimeMatrix[iStation][kStation]+travelTimeMatrix[kStation][jStation] {
 					travelTimeMatrix[iStation][jStation] = travelTimeMatrix[iStation][kStation] + travelTimeMatrix[kStation][jStation]
+					travelTimeMatrix[jStation][iStation] = travelTimeMatrix[iStation][kStation] + travelTimeMatrix[kStation][jStation]
+
+					travelPathMatrix[iStation][jStation] = travelPathMatrix[kStation][jStation]
 				}
 			}
 		}
 	}
 
 	g.TravelTimeMatrix = travelTimeMatrix
+	g.TravelPathMatrix = travelPathMatrix
+}
+
+func (g *Graph) MoveToStation(fromStationId StationId, toStationId StationId) {
+	paths := make([]string, 0)
+
+	start := fromStationId
+	end := toStationId
+	for start != end {
+		paths = append(paths, g.StationNames[end])
+		end = g.TravelPathMatrix[start][end]
+	}
+	paths = append(paths, g.StationNames[start])
+
+	slices.Reverse(paths)
+	fmt.Println(paths)
+}
+
+func (g *Graph) Deliver() {
+	undeliveredPackages := make([]Package, 0)
+	undeliveredPackages = append(undeliveredPackages, g.Deliveries...)
+
+	for len(undeliveredPackages) > 0 {
+		undeliveredPackage, _ := undeliveredPackages[0], undeliveredPackages[1:]
+
+		// find the nearest train to pickup this current package
+		var nearestTrain *Train
+		for _, train := range g.Trains {
+			// cannot pickup the package, too heavy
+			if train.Capacity > undeliveredPackage.Weight {
+				continue
+			}
+			if nearestTrain == nil {
+				nearestTrain = &train
+				continue
+			}
+
+			currentTravelTimeToPickupPackage := g.TravelTimeMatrix[train.CurrentStationId][undeliveredPackage.EndingStationId]
+			nearestTravelTimeToPickupPackage := g.TravelTimeMatrix[nearestTrain.CurrentStationId][undeliveredPackage.EndingStationId]
+			if currentTravelTimeToPickupPackage < nearestTravelTimeToPickupPackage {
+				nearestTrain = &train
+			} else if currentTravelTimeToPickupPackage == nearestTravelTimeToPickupPackage {
+				// TODO: There are 2 nearest trains that can pickup the package
+				nearestTrain = &train
+			}
+		}
+
+		if nearestTrain == nil {
+			// TODO: no train can pick up this package, might be too heavy
+			return
+		}
+
+		fmt.Println("delivering...")
+		g.MoveToStation(nearestTrain.StartingStationId, undeliveredPackage.EndingStationId)
+		return
+	}
 }

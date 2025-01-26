@@ -68,4 +68,5 @@ func main() {
 
 	graph.BuildTravelTimeMatrix()
 	graph.PrintShortestRoutes()
+	graph.Deliver()
 }

@@ -15,6 +15,8 @@ Iterate through each package, for each package:
             -   find the next package that is nearest to a train that can pick it up
 -
 
+Train assignment for different packages
+
 -   pickup, or dropoff?
     -   pickup when we have a nearest package
     -   dropoff if the trains are near a drop site (only possible if the trains are carrying a load)
@@ -22,3 +24,9 @@ Iterate through each package, for each package:
 -   keep track of packages that have not been picked up in a priority queue
     -   or can track nearest trains
 -   keep track of packages that have been pciked up in a priroity queue
+    -   2 packages with the same weight, different routes, which one to pickup?
+        -   does the train have a destination to go?
+            -   If yes, pick the route that is going to the same destination, along the shortest path
+            -   If no, pick any route (TODO: optimize this)
+    -   Group packages with similar destination?
+        -
