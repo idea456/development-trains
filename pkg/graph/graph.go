@@ -6,61 +6,68 @@ import (
 	"strings"
 )
 
+type StationId = int
+
 type Train struct {
-	Name            string
-	Capacity        int
-	StartingStation *Station
+	Name              string
+	Capacity          int
+	StartingStationId StationId
 }
 
 type Package struct {
-	Name            string
-	Weight          int
-	StartingStation *Station
-	EndingStation   *Station
+	Name              string
+	Weight            int
+	StartingStationId StationId
+	EndingStationId   StationId
 }
 
 type Station struct {
-	Name   string
-	Routes []Route
+	Id   StationId
+	Name string
 }
 
 type Route struct {
 	Name       string
 	TravelTime int
-	Stations   [2]string
 }
 
 type Graph struct {
-	Stations   map[string]*Station
-	Routes     []Route
-	Deliveries []Package
-	Trains     []Train
+	Stations         map[StationId]*Station
+	StationNames     map[StationId]string
+	Routes           map[StationId]map[StationId]*Route
+	Deliveries       []Package
+	Trains           []Train
+	TravelTimeMatrix [][]int
 }
 
 func NewGraph(stationNames []string, rawRoutes []string, rawDeliveries []string, rawTrains []string) (*Graph, error) {
-	stations := make(map[string]*Station, 0)
-	for _, stationName := range stationNames {
-		stations[stationName] = &Station{
+	stations := make(map[int]*Station, 0)
+	stationNamesToIdMap := make(map[string]int, 0)
+	stationNamesMap := make(map[int]string, 0)
+	for i, stationName := range stationNames {
+		stations[i] = &Station{
+			Id:   i,
 			Name: stationName,
 		}
+		stationNamesToIdMap[stationName] = i
+		stationNamesMap[i] = stationName
 	}
 
-	routes := make([]Route, 0)
+	routes := make(map[int]map[int]*Route, 0)
 	for _, rawRoute := range rawRoutes {
 		route := strings.Split(rawRoute, ",")
 		routeName := route[0]
-		fromStationName := route[1]
-		toStationName := route[2]
+		fromStation := stationNamesToIdMap[route[1]]
+		toStation := stationNamesToIdMap[route[2]]
 		travelTime, err := strconv.Atoi(route[3])
 		if err != nil {
 			return nil, fmt.Errorf("Route %s is not in integer format", routeName)
 		}
 
-		routes = append(routes, Route{
+		routes[fromStation][toStation] = &Route{
 			Name:       routeName,
 			TravelTime: travelTime,
-			Stations:   [2]string{fromStationName, toStationName},
-		})
+		}
 	}
 
 	deliveries := make([]Package, 0)
@@ -74,14 +81,14 @@ func NewGraph(stationNames []string, rawRoutes []string, rawDeliveries []string,
 		fromStationName := delivery[2]
 		toStationName := delivery[3]
 
-		fromStation := stations[fromStationName]
-		toStation := stations[toStationName]
+		fromStationId := stationNamesToIdMap[fromStationName]
+		toStationId := stationNamesToIdMap[toStationName]
 
 		deliveries = append(deliveries, Package{
-			Name:            packageName,
-			Weight:          weight,
-			StartingStation: fromStation,
-			EndingStation:   toStation,
+			Name:              packageName,
+			Weight:            weight,
+			StartingStationId: fromStationId,
+			EndingStationId:   toStationId,
 		})
 	}
 
@@ -95,19 +102,28 @@ func NewGraph(stationNames []string, rawRoutes []string, rawDeliveries []string,
 		}
 		startingStationName := train[2]
 
-		startingStation := stations[startingStationName]
+		startingStationId := stationNamesToIdMap[startingStationName]
 
 		trains = append(trains, Train{
-			Name:            trainName,
-			Capacity:        capacity,
-			StartingStation: startingStation,
+			Name:              trainName,
+			Capacity:          capacity,
+			StartingStationId: startingStationId,
 		})
 	}
 
 	return &Graph{
-		Stations:   stations,
-		Routes:     routes,
-		Deliveries: deliveries,
-		Trains:     trains,
+		Stations:     stations,
+		StationNames: stationNamesMap,
+		Routes:       routes,
+		Deliveries:   deliveries,
+		Trains:       trains,
 	}, nil
 }
+
+// func (g *Graph) BuildTravelTimeMatrix() {
+// 	travelTimeMatrix := make(map[string]map[string]int, 0)
+
+// 	// Run Floyd-Warshall to get all-pairs shortest path first for all stations
+// 	// Can do this as well for the packages
+
+// }
