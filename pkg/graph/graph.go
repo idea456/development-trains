@@ -380,51 +380,6 @@ func (g *Graph) MoveToDropPackage(trainName string, packages []Package, destinat
 	g.Moves = append(g.Moves, moves...)
 }
 
-func (g *Graph) PrintMoves() {
-	// W=0, T=Q1, N1=B, P1=[], N2=A, P2=[]
-	slices.SortStableFunc(g.Moves, func(a Move, b Move) int {
-		return strings.Compare(a.Train.Name, b.Train.Name)
-	})
-	for _, move := range g.Moves {
-		packagesCarriedNames := make([]string, 0)
-		for _, packageCarried := range move.PackagesCarried {
-			packagesCarriedNames = append(packagesCarriedNames, packageCarried.Name)
-		}
-		packageCarriedStr := fmt.Sprintf("[%s]", strings.Join(packagesCarriedNames, ","))
-
-		packageDroppedNames := make([]string, 0)
-		for _, packageDropped := range move.PackagesDropped {
-			packageDroppedNames = append(packageDroppedNames, packageDropped.Name)
-		}
-		packageDroppedStr := fmt.Sprintf("[%s]", strings.Join(packageDroppedNames, ","))
-
-		fmt.Printf("W=%d, T=%s, N1=%s, P1=%s, N2=%s, P2=%s\n", move.TimeTaken, move.Train.Name, move.StartingStation.Name, packageCarriedStr, move.EndingStation.Name, packageDroppedStr)
-	}
-}
-
-func (g *Graph) PrintMovesVerbose() {
-	// sort by train to easily track moves per train
-	slices.SortStableFunc(g.Moves, func(a Move, b Move) int {
-		return strings.Compare(a.Train.Name, b.Train.Name)
-	})
-	for _, move := range g.Moves {
-		fmt.Printf("[%d minutes] Train %s moving from station %s to station %s\n", move.TimeTaken, move.Train.Name, move.StartingStation.Name, move.EndingStation.Name)
-		if len(move.PackagesCarried) > 0 {
-			fmt.Println("Carried packages:")
-			for _, carriedPackage := range move.PackagesCarried {
-				fmt.Printf("	- %s package with weight %d heading to %s station\n", carriedPackage.Name, carriedPackage.Weight, g.StationNames[carriedPackage.EndingStationId])
-			}
-		}
-		if len(move.PackagesDropped) > 0 {
-			fmt.Println("Droppped packages:")
-			for _, dropppedPackage := range move.PackagesDropped {
-				fmt.Printf("	- %s package with weight %d at %s station\n", dropppedPackage.Name, dropppedPackage.Weight, g.StationNames[dropppedPackage.EndingStationId])
-			}
-		}
-		fmt.Println()
-	}
-}
-
 func (g *Graph) Deliver() {
 	deliveredPackages := make([]Package, 0)
 	undeliveredPackages := make([]Package, 0)

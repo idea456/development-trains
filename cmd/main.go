@@ -60,16 +60,19 @@ func main() {
 	}
 
 	fmt.Println(rawStations, rawRoutes, rawPackages, rawTrains)
-	graph, err := graph.NewGraph(rawStations, rawRoutes, rawPackages, rawTrains)
+	g, err := graph.NewGraph(rawStations, rawRoutes, rawPackages, rawTrains)
 	if err != nil {
 		slog.Error(fmt.Sprintf("There was an issue in building the graph: %v", err))
 		os.Exit(1)
 	}
 
-	graph.BuildTravelTimeMatrix()
+	g.BuildTravelTimeMatrix()
 	// graph.TrackCommonDestinationPackages()
 	// graph.PrintShortestRoutes()
-	graph.Deliver()
+	g.Deliver()
 	// graph.PrintMoves()
-	graph.PrintMovesVerbose()
+
+	printer := graph.NewPrinter(g.Moves, g.StationNames)
+	printer.PrintMoves()
+	printer.PrintMovesVerbose()
 }
