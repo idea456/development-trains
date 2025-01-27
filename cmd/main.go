@@ -70,5 +70,6 @@ func main() {
 	// graph.TrackCommonDestinationPackages()
 	// graph.PrintShortestRoutes()
 	graph.Deliver()
-	graph.PrintMoves()
+	// graph.PrintMoves()
+	graph.PrintMovesVerbose()
 }

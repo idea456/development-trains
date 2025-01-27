@@ -17,41 +17,6 @@ const MaxUint = ^uint(0)
 // const MaxInt = int(MaxUint >> 1)
 const MaxInt = 9999999999
 
-type Train struct {
-	Name              string
-	Capacity          int
-	TravelTime        int
-	StartingStationId StationId
-	CurrentStationId  StationId
-	PackagesCarried   []Package
-}
-
-func (train *Train) RemoveDroppedPackages(droppedPackages []Package) {
-	packages := make([]Package, 0)
-	totalCapacityRemoved := 0
-	for _, carriedPackage := range train.PackagesCarried {
-		isDroppedPackage := slices.ContainsFunc(droppedPackages, func(droppedPackage Package) bool {
-			return droppedPackage.Name == carriedPackage.Name
-		})
-		if !isDroppedPackage {
-			packages = append(packages, carriedPackage)
-		} else {
-			totalCapacityRemoved += carriedPackage.Weight
-		}
-	}
-	train.PackagesCarried = packages
-	train.Capacity = train.Capacity + totalCapacityRemoved
-}
-
-func (train *Train) AddPackage(delivery Package) {
-	train.PackagesCarried = append(train.PackagesCarried, delivery)
-	train.Capacity = train.Capacity - delivery.Weight
-}
-
-func (train *Train) UpdatePosition(newStationId StationId) {
-	train.CurrentStationId = newStationId
-}
-
 type Package struct {
 	Name              PackageName
 	Weight            int
@@ -175,11 +140,10 @@ func NewGraph(stationNames []string, rawRoutes []string, rawDeliveries []string,
 		startingStationId := stationNamesToIdMap[startingStationName]
 
 		trains[trainName] = &Train{
-			Name:              trainName,
-			Capacity:          capacity,
-			StartingStationId: startingStationId,
-			CurrentStationId:  startingStationId,
-			PackagesCarried:   make([]Package, 0),
+			Name:             trainName,
+			Capacity:         capacity,
+			CurrentStationId: startingStationId,
+			PackagesCarried:  make([]Package, 0),
 		}
 
 	}
@@ -221,12 +185,17 @@ func (g *Graph) BuildTravelTimeMatrix() {
 	travelTimeMatrix := make(map[StationId]map[StationId]int, 0)
 	travelPathMatrix := make(map[StationId]map[StationId]StationId, 0)
 
-	// initialise base cases, A-A, B-B travel time is 0 minutes
+	stationIds := make([]StationId, 0)
 	for stationId := range g.Stations {
+		stationIds = append(stationIds, stationId)
+	}
+	slices.Sort(stationIds)
+	// initialise base cases, A-A, B-B travel time is 0 minutes
+	for stationId := range stationIds {
 		travelTimeMatrix[stationId] = make(map[StationId]int, 0)
 		travelPathMatrix[stationId] = make(map[StationId]StationId, 0)
 
-		for adjacentStationId := range g.Stations {
+		for adjacentStationId := range stationIds {
 			// travelPathMatrix[stationId][adjacentStationId] = -1
 
 			if existingRoute, exists := g.Routes[stationId][adjacentStationId]; exists {
@@ -245,12 +214,6 @@ func (g *Graph) BuildTravelTimeMatrix() {
 		travelPathMatrix[stationId][stationId] = stationId
 	}
 
-	stationIds := make([]StationId, 0, len(g.Stations))
-	for stationId := range g.Stations {
-		stationIds = append(stationIds, stationId)
-	}
-	slices.Sort(stationIds)
-
 	// https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm
 	for kStation := range stationIds {
 		for iStation := range stationIds {
@@ -261,20 +224,12 @@ func (g *Graph) BuildTravelTimeMatrix() {
 
 					// https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm#Path_reconstruction
 					travelPathMatrix[iStation][jStation] = travelPathMatrix[kStation][jStation]
-					// travelPathMatrix[jStation][iStation] = travelPathMatrix[jStation][kStation]
+					travelPathMatrix[jStation][iStation] = travelPathMatrix[kStation][iStation]
 
 				}
 			}
 		}
 	}
-
-	for i := range stationIds {
-		for j := range travelTimeMatrix[i] {
-			fmt.Printf("Station %s to station %s: %d minutes\n", g.StationNames[i], g.StationNames[j], travelTimeMatrix[i][j])
-		}
-		fmt.Println()
-	}
-	fmt.Println()
 
 	g.TravelTimeMatrix = travelTimeMatrix
 	g.TravelPathMatrix = travelPathMatrix
@@ -322,11 +277,24 @@ func (g *Graph) TrackCommonDestinationPackages() {
 }
 
 func (g *Graph) MoveToPickupPackage(train Train, nearestPackage Package) {
+	// CASE: The package to pickup is already at the train's current location
+	if train.CurrentStationId == nearestPackage.StartingStationId {
+		g.Moves = append(g.Moves, Move{
+			TimeTaken:       g.Trains[train.Name].TravelTime, // no time taken to pickup package since the train is already there
+			Train:           train,
+			StartingStation: *g.Stations[train.CurrentStationId],
+			EndingStation:   *g.Stations[train.CurrentStationId],
+			PackagesCarried: g.Trains[train.Name].PackagesCarried,
+		})
+		return
+	}
+
 	paths := make([]StationId, 0)
 	// https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm#Path_reconstruction
 	start := train.CurrentStationId
 	end := nearestPackage.StartingStationId
 
+	fmt.Printf("moving from %s station to %s station\n", g.StationNames[start], g.StationNames[end])
 	paths = append(paths, end)
 	for start != end {
 		end = g.TravelPathMatrix[start][end]
@@ -336,7 +304,6 @@ func (g *Graph) MoveToPickupPackage(train Train, nearestPackage Package) {
 
 	slices.Reverse(paths)
 
-	fmt.Printf("moving from %s station to %s station\n", g.StationNames[start], g.StationNames[end])
 	fmt.Printf("%+v\n", paths)
 
 	moves := make([]Move, 0)
@@ -358,20 +325,23 @@ func (g *Graph) MoveToPickupPackage(train Train, nearestPackage Package) {
 	g.Trains[train.Name].TravelTime = currentTravelTime
 	g.Trains[train.Name].UpdatePosition(nearestPackage.StartingStationId)
 	g.Trains[train.Name].AddPackage(nearestPackage)
-	// moves[len(moves)-1].PackagesCarried = append(g.Trains[train.Name].PackagesCarried, nearestPackage)
 	g.Moves = append(g.Moves, moves...)
 }
 
-func (g *Graph) MoveToDropPackage(train Train, packages []Package, destinationStationId int) {
+func (g *Graph) MoveToDropPackage(trainName string, packages []Package, destinationStationId int) {
+	train := g.Trains[trainName]
+	// CASE: If the train is alerady at the drop station
+	// if train.CurrentStationId == destinationStationId
 	paths := make([]StationId, 0)
-	fmt.Printf("dropping from %s station to %s station\n", g.StationNames[train.CurrentStationId], g.StationNames[destinationStationId])
+	fmt.Printf("[%s train] dropping from %s station to %s station\n", train.Name, g.StationNames[train.CurrentStationId], g.StationNames[destinationStationId])
 	// https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm#Path_reconstruction
-	start := g.Trains[train.Name].CurrentStationId
+	start := g.Trains[trainName].CurrentStationId
 	end := destinationStationId
 
 	paths = append(paths, end)
 
 	for start != end {
+		// fmt.Println("wtf", start, end)
 		end = g.TravelPathMatrix[start][end]
 		paths = append(paths, end)
 	}
@@ -391,7 +361,7 @@ func (g *Graph) MoveToDropPackage(train Train, packages []Package, destinationSt
 		nextStationId := paths[i+1]
 		moves = append(moves, Move{
 			TimeTaken:       currentTravelTime,
-			Train:           train,
+			Train:           *train,
 			StartingStation: *g.Stations[currentStationId],
 			EndingStation:   *g.Stations[nextStationId],
 			PackagesCarried: g.Trains[train.Name].PackagesCarried,
@@ -403,7 +373,7 @@ func (g *Graph) MoveToDropPackage(train Train, packages []Package, destinationSt
 	g.Trains[train.Name].UpdatePosition(destinationStationId)
 
 	fmt.Printf("dropped packages: %+v\n", packages)
-	g.Trains[train.Name].RemoveDroppedPackages(packages)
+	g.Trains[train.Name].RemovePackages(packages)
 	// have to update again, since RemoveDroppedPackages will filter out some of the carried packages that are dropped
 	moves[len(moves)-1].PackagesCarried = g.Trains[train.Name].PackagesCarried
 	moves[len(moves)-1].PackagesDropped = packages
@@ -495,12 +465,14 @@ func (g *Graph) Deliver() {
 					continue
 				}
 
-				currentTravelTimeToPickupPackage := g.TravelTimeMatrix[train.CurrentStationId][undeliveredPackage.StartingStationId]
-				nearestTravelTimeToPickupPackage := g.TravelTimeMatrix[nearestPackage.StartingStationId][train.CurrentStationId]
-				if currentTravelTimeToPickupPackage < nearestTravelTimeToPickupPackage {
+				travelTimeToCurrentPackage := g.TravelTimeMatrix[train.CurrentStationId][undeliveredPackage.StartingStationId]
+				travelTimeToNearestPackage := g.TravelTimeMatrix[nearestPackage.StartingStationId][train.CurrentStationId]
+
+				fmt.Println(travelTimeToCurrentPackage, travelTimeToNearestPackage)
+				if travelTimeToCurrentPackage < travelTimeToNearestPackage {
 					nearestPackage = &undeliveredPackage
 					nearestPackageIndex = i
-				} else if currentTravelTimeToPickupPackage == nearestTravelTimeToPickupPackage {
+				} else if travelTimeToCurrentPackage == travelTimeToNearestPackage {
 					// NOTE: There are 2 nearest trains that can pickup the package
 					// TODO: Handle this case
 					nearestPackage = &undeliveredPackage
@@ -552,11 +524,15 @@ func (g *Graph) Deliver() {
 
 			// for each package to be delivered for this train, choose the package that can be delivered earliest (use the matrix)
 			for packageDestinationStationId, carriedPackages := range packagesByDestinationMap {
-				g.MoveToDropPackage(assignedTrain, carriedPackages, packageDestinationStationId)
+				g.MoveToDropPackage(assignedTrain.Name, carriedPackages, packageDestinationStationId)
 
 				deliveredPackages = append(deliveredPackages, carriedPackages...)
 			}
+
 			assignedTrain.PackagesCarried = []Package{}
+			// if !assignedTrain.HasPackagesToDeliver() {
+			// 	unassignedTrains = append(unassignedTrains, assignedTrain)
+			// }
 		}
 
 	}
