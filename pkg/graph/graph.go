@@ -72,7 +72,7 @@ type Route struct {
 }
 
 type Move struct {
-	TravelTime      int
+	TimeTaken       int
 	Train           Train
 	StartingStation Station
 	EndingStation   Station
@@ -347,7 +347,7 @@ func (g *Graph) MoveToPickupPackage(train Train, nearestPackage Package) {
 		nextStationId := paths[i+1]
 
 		moves = append(moves, Move{
-			TravelTime:      currentTravelTime,
+			TimeTaken:       currentTravelTime,
 			Train:           train,
 			StartingStation: *g.Stations[currentStationId],
 			EndingStation:   *g.Stations[nextStationId],
@@ -390,7 +390,7 @@ func (g *Graph) MoveToDropPackage(train Train, packages []Package, destinationSt
 		currentStationId := paths[i]
 		nextStationId := paths[i+1]
 		moves = append(moves, Move{
-			TravelTime:      currentTravelTime,
+			TimeTaken:       currentTravelTime,
 			Train:           train,
 			StartingStation: *g.Stations[currentStationId],
 			EndingStation:   *g.Stations[nextStationId],
@@ -411,16 +411,34 @@ func (g *Graph) MoveToDropPackage(train Train, packages []Package, destinationSt
 }
 
 func (g *Graph) PrintMoves() {
+	// W=0, T=Q1, N1=B, P1=[], N2=A, P2=[]
+	slices.SortStableFunc(g.Moves, func(a Move, b Move) int {
+		return strings.Compare(a.Train.Name, b.Train.Name)
+	})
+	for _, move := range g.Moves {
+		packagesCarriedNames := make([]string, 0)
+		for _, packageCarried := range move.PackagesCarried {
+			packagesCarriedNames = append(packagesCarriedNames, packageCarried.Name)
+		}
+		packageCarriedStr := fmt.Sprintf("[%s]", strings.Join(packagesCarriedNames, ","))
+
+		packageDroppedNames := make([]string, 0)
+		for _, packageDropped := range move.PackagesDropped {
+			packageDroppedNames = append(packageDroppedNames, packageDropped.Name)
+		}
+		packageDroppedStr := fmt.Sprintf("[%s]", strings.Join(packageDroppedNames, ","))
+
+		fmt.Printf("W=%d, T=%s, N1=%s, P1=%s, N2=%s, P2=%s\n", move.TimeTaken, move.Train.Name, move.StartingStation.Name, packageCarriedStr, move.EndingStation.Name, packageDroppedStr)
+	}
+}
+
+func (g *Graph) PrintMovesVerbose() {
 	// sort by train to easily track moves per train
 	slices.SortStableFunc(g.Moves, func(a Move, b Move) int {
 		return strings.Compare(a.Train.Name, b.Train.Name)
 	})
 	for _, move := range g.Moves {
-		if move.TravelTime == 696969 {
-			fmt.Println("DROPOFF PHASE")
-			continue
-		}
-		fmt.Printf("[%d minutes] Train %s moving from station %s to station %s\n", move.TravelTime, move.Train.Name, move.StartingStation.Name, move.EndingStation.Name)
+		fmt.Printf("[%d minutes] Train %s moving from station %s to station %s\n", move.TimeTaken, move.Train.Name, move.StartingStation.Name, move.EndingStation.Name)
 		if len(move.PackagesCarried) > 0 {
 			fmt.Println("Carried packages:")
 			for _, carriedPackage := range move.PackagesCarried {
@@ -501,10 +519,6 @@ func (g *Graph) Deliver() {
 
 			undeliveredPackages = append(undeliveredPackages[:nearestPackageIndex], undeliveredPackages[nearestPackageIndex+1:]...)
 		}
-
-		g.Moves = append(g.Moves, Move{
-			TravelTime: 696969,
-		})
 
 		// at this point, all packages should have been picked up by some trains OR all trains have been packed
 		// we need the trains to deliver the packages to their destinations first, then the train can pick up more packages if needed
