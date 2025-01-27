@@ -380,7 +380,7 @@ func (g *Graph) MoveToDropPackage(trainName string, packages []Package, destinat
 	g.Moves = append(g.Moves, moves...)
 }
 
-func (g *Graph) Deliver() {
+func (g *Graph) Deliver() error {
 	deliveredPackages := make([]Package, 0)
 	undeliveredPackages := make([]Package, 0)
 	undeliveredPackages = append(undeliveredPackages, g.Deliveries...)
@@ -443,6 +443,7 @@ func (g *Graph) Deliver() {
 
 			g.MoveToPickupPackage(*train, *nearestPackage)
 
+			// this package has been picked up and can be delivered, update the undeliveredPackages
 			undeliveredPackages = append(undeliveredPackages[:nearestPackageIndex], undeliveredPackages[nearestPackageIndex+1:]...)
 		}
 
@@ -490,5 +491,12 @@ func (g *Graph) Deliver() {
 			}
 		}
 
+		// CASE: There are still packages to deliver, but no trains can deliver them
+		// Because they might not have enough capacity
+		if len(unassignedTrains) == 0 && len(undeliveredPackages) > 0 {
+			return fmt.Errorf("there are still packages to deliver, but no trains can deliver them :(")
+		}
 	}
+
+	return nil
 }

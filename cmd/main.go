@@ -69,10 +69,14 @@ func main() {
 	g.BuildTravelTimeMatrix()
 	// graph.TrackCommonDestinationPackages()
 	// graph.PrintShortestRoutes()
-	g.Deliver()
+	if err := g.Deliver(); err != nil {
+		slog.Error(fmt.Sprintf("unable to deliver all packages: %v", err))
+		os.Exit(1)
+	}
 	// graph.PrintMoves()
 
 	printer := graph.NewPrinter(g.Moves, g.StationNames)
 	printer.PrintMoves()
-	printer.PrintMovesVerbose()
+	// printer.PrintMovesVerbose()
+	printer.PrintSummary()
 }

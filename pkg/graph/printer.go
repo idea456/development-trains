@@ -2,8 +2,10 @@ package graph
 
 import (
 	"fmt"
+	"os"
 	"slices"
 	"strings"
+	"text/tabwriter"
 )
 
 type Printer struct {
@@ -61,4 +63,26 @@ func (printer *Printer) PrintMovesVerbose() {
 		}
 		fmt.Println()
 	}
+}
+
+func (printer *Printer) PrintSummary() {
+	// sort by train to easily track moves per train
+	slices.SortStableFunc(printer.Moves, func(a Move, b Move) int {
+		return strings.Compare(a.Train.Name, b.Train.Name)
+	})
+	movesWithDeliveredPackages := make([]Move, 0)
+	for _, move := range printer.Moves {
+		if len(move.PackagesDropped) > 0 {
+			movesWithDeliveredPackages = append(movesWithDeliveredPackages, move)
+		}
+	}
+	w := tabwriter.NewWriter(os.Stdout, 1, 1, 1, ' ', 0)
+	fmt.Fprintln(w, "Name\tDeliveredAt\tTrain\t")
+
+	for _, move := range movesWithDeliveredPackages {
+		for _, deliveredPackage := range move.PackagesDropped {
+			fmt.Fprintf(w, "%s\t%dm\t%s\t\n", deliveredPackage.Name, move.TimeTaken, move.Train.Name)
+		}
+	}
+	w.Flush()
 }

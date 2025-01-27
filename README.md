@@ -13,7 +13,8 @@ Iterate through each package, for each package:
         -   If no:
             -   execute the plan to deliver the packages first to their destinations
             -   find the next package that is nearest to a train that can pick it up
--
+
+Iterate through each train, for each train:
 
 Train assignment for different packages
 
@@ -28,5 +29,6 @@ Train assignment for different packages
         -   does the train have a destination to go?
             -   If yes, pick the route that is going to the same destination, along the shortest path
             -   If no, pick any route (TODO: optimize this)
-    -   Group packages with similar destination?
-        -
+    -   ## Group packages with similar destination?
+
+Simulate each train's journey to destination, pick the route with the highest pickup/dropoff rate?
