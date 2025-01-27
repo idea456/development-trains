@@ -76,7 +76,7 @@ func main() {
 	// graph.PrintMoves()
 
 	printer := graph.NewPrinter(g.Moves, g.StationNames)
-	printer.PrintMoves()
-	// printer.PrintMovesVerbose()
+	// printer.PrintMoves()
+	printer.PrintMovesVerbose()
 	printer.PrintSummary()
 }

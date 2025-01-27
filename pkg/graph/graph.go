@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"container/heap"
 	"fmt"
 	"maps"
 	"slices"
@@ -215,7 +216,7 @@ func (g *Graph) BuildTravelTimeMatrix() {
 		travelPathMatrix[stationId][stationId] = stationId
 	}
 
-	// https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm
+	// https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm#Pseudocode
 	for kStation := range stationIds {
 		for iStation := range stationIds {
 			for jStation := range stationIds {
@@ -336,7 +337,6 @@ func (g *Graph) MoveToDropPackage(trainName string, packages []Package, destinat
 	// CASE: If the train is alerady at the drop station
 	// if train.CurrentStationId == destinationStationId
 	paths := make([]StationId, 0)
-	fmt.Printf("[%s train] dropping from %s station to %s station\n", train.Name, g.StationNames[train.CurrentStationId], g.StationNames[destinationStationId])
 	// https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm#Path_reconstruction
 	start := g.Trains[trainName].CurrentStationId
 	end := destinationStationId
@@ -344,7 +344,6 @@ func (g *Graph) MoveToDropPackage(trainName string, packages []Package, destinat
 	paths = append(paths, end)
 
 	for start != end {
-		// fmt.Println("wtf", start, end)
 		end = g.TravelPathMatrix[start][end]
 		paths = append(paths, end)
 	}
@@ -381,11 +380,11 @@ func (g *Graph) MoveToDropPackage(trainName string, packages []Package, destinat
 }
 
 func (g *Graph) Deliver() error {
-	deliveredPackages := make([]Package, 0)
 	undeliveredPackages := make([]Package, 0)
 	undeliveredPackages = append(undeliveredPackages, g.Deliveries...)
 
-	unassignedTrains := make([]Train, 0)
+	trainsQueue := &TrainsQueue{}
+	heap.Init(trainsQueue)
 
 	// go returns the keys in random order, to make it determinstic we sort it ahead of time
 	trainNames := make([]string, 0, len(g.Trains))
@@ -394,18 +393,26 @@ func (g *Graph) Deliver() error {
 	}
 	slices.Sort(trainNames)
 	for _, trainName := range trainNames {
-		unassignedTrains = append(unassignedTrains, *g.Trains[trainName])
+		heap.Push(trainsQueue, *g.Trains[trainName])
+		// trainsQueue = append(unassignedTrains, *g.Trains[trainName])
 	}
+
+	for _, pushedTrain := range *trainsQueue {
+		fmt.Printf("(%s,%dkg),", pushedTrain.Name, pushedTrain.Capacity)
+	}
+	fmt.Println()
 
 	// if we haven't delivered all the packages yet
 	for len(undeliveredPackages) > 0 {
 		// NOTE: PICKUP phase
 		// assign all the trains (if possible) first
 		// TODO: Handle a case where there are unassigned trains, but there are no more packages to pick up
-		for len(unassignedTrains) > 0 {
+		for len(*trainsQueue) > 0 {
 			// undeliveredPackage, _ := undeliveredPackages[0], undeliveredPackages[1:]
 			// TODO: Naivse solution, just take the first train, improve this
-			train := g.Trains[unassignedTrains[0].Name]
+			// train := g.Trains[unassignedTrains[0].Name]
+			assignableTrain := heap.Pop(trainsQueue).(Train)
+			train := g.Trains[assignableTrain.Name]
 
 			var nearestPackage *Package
 			var nearestPackageIndex int
@@ -437,8 +444,10 @@ func (g *Graph) Deliver() error {
 			if nearestPackage == nil {
 				// NOTE: this train cannot pick up anymore packages, might be too heavy or its already filled with pickups
 				// TODO: Handle this case (this is done already?)
-				unassignedTrains = unassignedTrains[1:]
+				// unassignedTrains = unassignedTrains[1:]
 				continue
+			} else {
+				heap.Push(trainsQueue, *train)
 			}
 
 			g.MoveToPickupPackage(*train, *nearestPackage)
@@ -480,20 +489,19 @@ func (g *Graph) Deliver() error {
 			// for each package to be delivered for this train, choose the package that can be delivered earliest (use the matrix)
 			for packageDestinationStationId, carriedPackages := range packagesByDestinationMap {
 				g.MoveToDropPackage(assignedTrain.Name, carriedPackages, packageDestinationStationId)
-
-				deliveredPackages = append(deliveredPackages, carriedPackages...)
 			}
 
 			assignedTrain.PackagesCarried = []Package{}
 			// CASE: If there's still packages to pick up after all the trains have been assigned
 			if !assignedTrain.HasPackagesToDeliver() {
-				unassignedTrains = append(unassignedTrains, assignedTrain)
+				// unassignedTrains = append(unassignedTrains, assignedTrain)
+				heap.Push(trainsQueue, assignedTrain)
 			}
 		}
 
 		// CASE: There are still packages to deliver, but no trains can deliver them
 		// Because they might not have enough capacity
-		if len(unassignedTrains) == 0 && len(undeliveredPackages) > 0 {
+		if len(*trainsQueue) == 0 && len(undeliveredPackages) > 0 {
 			return fmt.Errorf("there are still packages to deliver, but no trains can deliver them :(")
 		}
 	}

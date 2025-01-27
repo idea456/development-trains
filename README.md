@@ -32,3 +32,6 @@ Train assignment for different packages
     -   ## Group packages with similar destination?
 
 Simulate each train's journey to destination, pick the route with the highest pickup/dropoff rate?
+
+Priority queue for packages, prioritize packages with most similar destinations
+Priority queue for trains with most weight first

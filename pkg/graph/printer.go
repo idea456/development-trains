@@ -79,6 +79,7 @@ func (printer *Printer) PrintSummary() {
 	w := tabwriter.NewWriter(os.Stdout, 1, 1, 1, ' ', 0)
 	fmt.Fprintln(w, "Name\tDeliveredAt\tTrain\t")
 
+	// deliveredPackages := make([]string, 0)
 	for _, move := range movesWithDeliveredPackages {
 		for _, deliveredPackage := range move.PackagesDropped {
 			fmt.Fprintf(w, "%s\t%dm\t%s\t\n", deliveredPackage.Name, move.TimeTaken, move.Train.Name)
