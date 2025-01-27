@@ -3,7 +3,6 @@ package graph
 import (
 	"container/heap"
 	"fmt"
-	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,7 +15,7 @@ type PackageName = string
 const MaxUint = ^uint(0)
 
 // const MaxInt = int(MaxUint >> 1)
-const MaxInt = 9999999999
+const MaxInt = 999999999999
 
 type Package struct {
 	Name              PackageName
@@ -237,51 +236,9 @@ func (g *Graph) BuildTravelTimeMatrix() {
 	g.TravelPathMatrix = travelPathMatrix
 }
 
-func (g *Graph) TrackCommonDestinationPackages() {
-	// trace the shortest path for each package
-	// while tracing, if we find another package that is also going to the same destination, we store the reference of that in potential packages
-	// TODO: This is just one direction, source -> destination, optimize this later
-	for _, delivery := range g.Deliveries {
-		start := delivery.StartingStationId
-		end := delivery.EndingStationId
-		commonPackages := make(map[PackageName]*Package, 0)
-		fmt.Printf("From station %s to station %s\n", g.StationNames[start], g.StationNames[end])
-		for start != end {
-			// if this station has packages placed on it
-			// and that package is also going to the same destination
-			for _, initialPackage := range g.Stations[end].InitialPackages {
-				if initialPackage.EndingStationId == delivery.EndingStationId {
-					commonPackages[initialPackage.Name] = initialPackage
-				}
-			}
-			// g.Stations[end].PotentialPackages = commonPackages
-			maps.Copy(g.Stations[end].PotentialPackages, commonPackages)
-			end = g.TravelPathMatrix[start][end]
-		}
-		for _, initialPackage := range g.Stations[end].InitialPackages {
-			if initialPackage.EndingStationId == delivery.EndingStationId {
-				g.Stations[end].PotentialPackages[initialPackage.Name] = initialPackage
-			}
-		}
-		maps.Copy(g.Stations[end].PotentialPackages, commonPackages)
-	}
-
-	for _, station := range g.Stations {
-		if len(station.PotentialPackages) == 0 {
-			continue
-		}
-		fmt.Printf("Common destination packages for station %s:\n", station.Name)
-		for _, potentialPackage := range station.PotentialPackages {
-			fmt.Printf("Package %s (%d kg) with destination to station %s\n", potentialPackage.Name, potentialPackage.Weight, g.StationNames[potentialPackage.EndingStationId])
-		}
-		fmt.Println()
-	}
-}
-
 func (g *Graph) MoveToPickupPackage(train Train, nearestPackage Package) {
 	// CASE: The package to pickup is already at the train's current location
 	if train.CurrentStationId == nearestPackage.StartingStationId {
-		fmt.Println("same")
 		g.Moves = append(g.Moves, Move{
 			TimeTaken:       g.Trains[train.Name].TravelTime, // no time taken to pickup package since the train is already there
 			Train:           train,
@@ -408,40 +365,55 @@ func (g *Graph) Deliver() error {
 		// assign all the trains (if possible) first
 		// TODO: Handle a case where there are unassigned trains, but there are no more packages to pick up
 		for len(*trainsQueue) > 0 {
+			if len(undeliveredPackages) == 0 {
+				break
+			}
 			// undeliveredPackage, _ := undeliveredPackages[0], undeliveredPackages[1:]
 			// TODO: Naivse solution, just take the first train, improve this
 			// train := g.Trains[unassignedTrains[0].Name]
 			assignableTrain := heap.Pop(trainsQueue).(Train)
 			train := g.Trains[assignableTrain.Name]
 
-			var nearestPackage *Package
-			var nearestPackageIndex int
+			// var nearestPackage *Package
+			// var nearestPackageIndex int
 			// check each package, and find a nearest package (TODO: AND optimal package using potential common package destinations) to assign to the current train
-			for i, undeliveredPackage := range undeliveredPackages {
-				if undeliveredPackage.Weight > train.Capacity {
-					continue
+			// for i, undeliveredPackage := range undeliveredPackages {
+			// 	if undeliveredPackage.Weight > train.Capacity {
+			// 		continue
+			// 	}
+
+			// 	if nearestPackage == nil {
+			// 		nearestPackage = &undeliveredPackage
+			// 		continue
+			// 	}
+
+			// 	travelTimeToCurrentPackage := g.TravelTimeMatrix[train.CurrentStationId][undeliveredPackage.StartingStationId]
+			// 	travelTimeToNearestPackage := g.TravelTimeMatrix[nearestPackage.StartingStationId][train.CurrentStationId]
+
+			// 	if travelTimeToCurrentPackage < travelTimeToNearestPackage {
+			// 		nearestPackage = &undeliveredPackage
+			// 		nearestPackageIndex = i
+			// 	} else if travelTimeToCurrentPackage == travelTimeToNearestPackage {
+			// 		// NOTE: There are 2 nearest trains that can pickup the package
+			// 		// TODO: Handle this case
+			// 		nearestPackage = &undeliveredPackage
+			// 		nearestPackageIndex = i
+			// 	}
+			// }
+
+			slices.SortFunc(undeliveredPackages, func(packageX, packageY Package) int {
+				if packageX.EndingStationId != packageY.EndingStationId {
+					return packageX.EndingStationId - packageY.EndingStationId
+				} else {
+					// then, sort by how close they are to the train
+					packageXDistanceToTrain := g.TravelTimeMatrix[train.CurrentStationId][packageX.StartingStationId]
+					packageYDistanceToTrain := g.TravelTimeMatrix[train.CurrentStationId][packageY.StartingStationId]
+					return packageXDistanceToTrain - packageYDistanceToTrain
 				}
+			})
+			nearestPackage := undeliveredPackages[0]
 
-				if nearestPackage == nil {
-					nearestPackage = &undeliveredPackage
-					continue
-				}
-
-				travelTimeToCurrentPackage := g.TravelTimeMatrix[train.CurrentStationId][undeliveredPackage.StartingStationId]
-				travelTimeToNearestPackage := g.TravelTimeMatrix[nearestPackage.StartingStationId][train.CurrentStationId]
-
-				if travelTimeToCurrentPackage < travelTimeToNearestPackage {
-					nearestPackage = &undeliveredPackage
-					nearestPackageIndex = i
-				} else if travelTimeToCurrentPackage == travelTimeToNearestPackage {
-					// NOTE: There are 2 nearest trains that can pickup the package
-					// TODO: Handle this case
-					nearestPackage = &undeliveredPackage
-					nearestPackageIndex = i
-				}
-			}
-
-			if nearestPackage == nil {
+			if nearestPackage.Weight > train.Capacity {
 				// NOTE: this train cannot pick up anymore packages, might be too heavy or its already filled with pickups
 				// TODO: Handle this case (this is done already?)
 				// unassignedTrains = unassignedTrains[1:]
@@ -450,10 +422,17 @@ func (g *Graph) Deliver() error {
 				heap.Push(trainsQueue, *train)
 			}
 
-			g.MoveToPickupPackage(*train, *nearestPackage)
-
+			g.MoveToPickupPackage(*train, nearestPackage)
 			// this package has been picked up and can be delivered, update the undeliveredPackages
-			undeliveredPackages = append(undeliveredPackages[:nearestPackageIndex], undeliveredPackages[nearestPackageIndex+1:]...)
+			// undeliveredPackages = append(undeliveredPackages[:nearestPackageIndex], undeliveredPackages[nearestPackageIndex+1:]...)
+			undeliveredPackages = undeliveredPackages[1:]
+
+			for g.Trains[train.Name].Capacity > 0 && len(undeliveredPackages) > 0 {
+				nearestPackage = undeliveredPackages[0]
+
+				g.MoveToPickupPackage(*train, nearestPackage)
+				undeliveredPackages = undeliveredPackages[1:]
+			}
 		}
 
 		// at this point, all packages should have been picked up by some trains OR all trains have been packed

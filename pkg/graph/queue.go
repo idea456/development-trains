@@ -3,7 +3,8 @@ package graph
 type PackagesQueue []Package
 
 func (q *PackagesQueue) Push(newPackage interface{}) {
-	*q = append(*q, newPackage.(Package))
+	delivery := newPackage.(Package)
+	*q = append(*q, delivery)
 }
 
 func (q *PackagesQueue) Pop() interface{} {
@@ -21,7 +22,7 @@ func (q *PackagesQueue) Pop() interface{} {
 // - or by weight?
 func (q PackagesQueue) Less(i, j int) bool {
 	// if q[i].EndingStationId == q[j].EndingStationId {
-	// 	return true
+	// 	return q[i].DistanceToDestination <= q[j].DistanceToDestination
 	// }
 	return q[i].EndingStationId <= q[j].EndingStationId
 }
@@ -51,6 +52,9 @@ func (q *TrainsQueue) Pop() interface{} {
 
 // NOTE: trains with higher capacity has higher priority
 func (q TrainsQueue) Less(i, j int) bool {
+	// if q[i].Capacity == q[j].Capacity {
+	// 	return len(q[i].PackagesCarried) < len(q[j].PackagesCarried)
+	// }
 	return q[i].Capacity >= q[j].Capacity
 }
 
