@@ -22,6 +22,7 @@ type Package struct {
 	Weight            int
 	StartingStationId StationId
 	EndingStationId   StationId
+	DeliveredAt       int
 }
 
 type Station struct {
@@ -279,6 +280,7 @@ func (g *Graph) TrackCommonDestinationPackages() {
 func (g *Graph) MoveToPickupPackage(train Train, nearestPackage Package) {
 	// CASE: The package to pickup is already at the train's current location
 	if train.CurrentStationId == nearestPackage.StartingStationId {
+		fmt.Println("same")
 		g.Moves = append(g.Moves, Move{
 			TimeTaken:       g.Trains[train.Name].TravelTime, // no time taken to pickup package since the train is already there
 			Train:           train,
@@ -286,6 +288,7 @@ func (g *Graph) MoveToPickupPackage(train Train, nearestPackage Package) {
 			EndingStation:   *g.Stations[train.CurrentStationId],
 			PackagesCarried: g.Trains[train.Name].PackagesCarried,
 		})
+		g.Trains[train.Name].AddPackage(nearestPackage)
 		return
 	}
 
@@ -356,7 +359,6 @@ func (g *Graph) MoveToDropPackage(trainName string, packages []Package, destinat
 	moves := make([]Move, 0)
 	currentTravelTime := g.Trains[train.Name].TravelTime
 	for i := 0; i < len(paths)-1; i++ {
-		// fmt.Printf("%s station to %s station => %d minutes\n", move.StartingStation.Name, move.EndingStation.Name, move.TravelTime)
 		currentStationId := paths[i]
 		nextStationId := paths[i+1]
 		moves = append(moves, Move{
@@ -371,8 +373,6 @@ func (g *Graph) MoveToDropPackage(trainName string, packages []Package, destinat
 
 	g.Trains[train.Name].TravelTime = currentTravelTime
 	g.Trains[train.Name].UpdatePosition(destinationStationId)
-
-	fmt.Printf("dropped packages: %+v\n", packages)
 	g.Trains[train.Name].RemovePackages(packages)
 	// have to update again, since RemoveDroppedPackages will filter out some of the carried packages that are dropped
 	moves[len(moves)-1].PackagesCarried = g.Trains[train.Name].PackagesCarried
@@ -423,7 +423,6 @@ func (g *Graph) Deliver() {
 				travelTimeToCurrentPackage := g.TravelTimeMatrix[train.CurrentStationId][undeliveredPackage.StartingStationId]
 				travelTimeToNearestPackage := g.TravelTimeMatrix[nearestPackage.StartingStationId][train.CurrentStationId]
 
-				fmt.Println(travelTimeToCurrentPackage, travelTimeToNearestPackage)
 				if travelTimeToCurrentPackage < travelTimeToNearestPackage {
 					nearestPackage = &undeliveredPackage
 					nearestPackageIndex = i
@@ -485,9 +484,10 @@ func (g *Graph) Deliver() {
 			}
 
 			assignedTrain.PackagesCarried = []Package{}
-			// if !assignedTrain.HasPackagesToDeliver() {
-			// 	unassignedTrains = append(unassignedTrains, assignedTrain)
-			// }
+			// CASE: If there's still packages to pick up after all the trains have been assigned
+			if !assignedTrain.HasPackagesToDeliver() {
+				unassignedTrains = append(unassignedTrains, assignedTrain)
+			}
 		}
 
 	}
