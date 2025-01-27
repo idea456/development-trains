@@ -12,15 +12,44 @@ type StationId = int
 type PackageName = string
 
 // // to represent Infinity in integer format
-// const MaxUint = ^uint(0)
-const MaxInt = 999999
+const MaxUint = ^uint(0)
+
+// const MaxInt = int(MaxUint >> 1)
+const MaxInt = 9999999999
 
 type Train struct {
 	Name              string
 	Capacity          int
+	TravelTime        int
 	StartingStationId StationId
 	CurrentStationId  StationId
-	PackagesCarried   []*Package
+	PackagesCarried   []Package
+}
+
+func (train *Train) RemoveDroppedPackages(droppedPackages []Package) {
+	packages := make([]Package, 0)
+	totalCapacityRemoved := 0
+	for _, carriedPackage := range train.PackagesCarried {
+		isDroppedPackage := slices.ContainsFunc(droppedPackages, func(droppedPackage Package) bool {
+			return droppedPackage.Name == carriedPackage.Name
+		})
+		if !isDroppedPackage {
+			packages = append(packages, carriedPackage)
+		} else {
+			totalCapacityRemoved += carriedPackage.Weight
+		}
+	}
+	train.PackagesCarried = packages
+	train.Capacity = train.Capacity + totalCapacityRemoved
+}
+
+func (train *Train) AddPackage(delivery Package) {
+	train.PackagesCarried = append(train.PackagesCarried, delivery)
+	train.Capacity = train.Capacity - delivery.Weight
+}
+
+func (train *Train) UpdatePosition(newStationId StationId) {
+	train.CurrentStationId = newStationId
 }
 
 type Package struct {
@@ -43,12 +72,12 @@ type Route struct {
 }
 
 type Move struct {
-	StartedSeconds  int
+	TravelTime      int
 	Train           Train
 	StartingStation Station
-	PickedPackages  []Package
 	EndingStation   Station
-	DroppedPackages Package
+	PackagesCarried []Package
+	PackagesDropped []Package
 }
 
 type Graph struct {
@@ -56,7 +85,7 @@ type Graph struct {
 	StationNames     map[StationId]string
 	Routes           map[StationId]map[StationId]*Route
 	Deliveries       []Package
-	Trains           []Train
+	Trains           map[string]*Train
 	TravelTimeMatrix map[StationId]map[StationId]int
 	TravelPathMatrix map[StationId]map[StationId]StationId
 	Moves            []Move
@@ -133,7 +162,7 @@ func NewGraph(stationNames []string, rawRoutes []string, rawDeliveries []string,
 		deliveries = append(deliveries, newDelivery)
 	}
 
-	trains := make([]Train, 0)
+	trains := make(map[string]*Train, 0)
 	for _, rawTrain := range rawTrains {
 		train := strings.Split(rawTrain, ",")
 		trainName := train[0]
@@ -145,13 +174,14 @@ func NewGraph(stationNames []string, rawRoutes []string, rawDeliveries []string,
 
 		startingStationId := stationNamesToIdMap[startingStationName]
 
-		trains = append(trains, Train{
+		trains[trainName] = &Train{
 			Name:              trainName,
 			Capacity:          capacity,
 			StartingStationId: startingStationId,
 			CurrentStationId:  startingStationId,
-			PackagesCarried:   make([]*Package, 0),
-		})
+			PackagesCarried:   make([]Package, 0),
+		}
+
 	}
 
 	return &Graph{
@@ -197,7 +227,7 @@ func (g *Graph) BuildTravelTimeMatrix() {
 		travelPathMatrix[stationId] = make(map[StationId]StationId, 0)
 
 		for adjacentStationId := range g.Stations {
-			travelPathMatrix[stationId][adjacentStationId] = -1
+			// travelPathMatrix[stationId][adjacentStationId] = -1
 
 			if existingRoute, exists := g.Routes[stationId][adjacentStationId]; exists {
 				travelTimeMatrix[stationId][adjacentStationId] = existingRoute.TravelTime
@@ -215,21 +245,36 @@ func (g *Graph) BuildTravelTimeMatrix() {
 		travelPathMatrix[stationId][stationId] = stationId
 	}
 
-	for kStation := range g.Stations {
-		for iStation := range g.Stations {
-			for jStation := range g.Stations {
+	stationIds := make([]StationId, 0, len(g.Stations))
+	for stationId := range g.Stations {
+		stationIds = append(stationIds, stationId)
+	}
+	slices.Sort(stationIds)
+
+	// https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm
+	for kStation := range stationIds {
+		for iStation := range stationIds {
+			for jStation := range stationIds {
 				if travelTimeMatrix[iStation][jStation] > travelTimeMatrix[iStation][kStation]+travelTimeMatrix[kStation][jStation] {
 					travelTimeMatrix[iStation][jStation] = travelTimeMatrix[iStation][kStation] + travelTimeMatrix[kStation][jStation]
-					travelTimeMatrix[jStation][iStation] = travelTimeMatrix[iStation][kStation] + travelTimeMatrix[kStation][jStation]
+					travelTimeMatrix[jStation][iStation] = travelTimeMatrix[jStation][kStation] + travelTimeMatrix[kStation][iStation]
 
 					// https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm#Path_reconstruction
 					travelPathMatrix[iStation][jStation] = travelPathMatrix[kStation][jStation]
-					travelPathMatrix[jStation][iStation] = travelPathMatrix[jStation][kStation]
+					// travelPathMatrix[jStation][iStation] = travelPathMatrix[jStation][kStation]
 
 				}
 			}
 		}
 	}
+
+	for i := range stationIds {
+		for j := range travelTimeMatrix[i] {
+			fmt.Printf("Station %s to station %s: %d minutes\n", g.StationNames[i], g.StationNames[j], travelTimeMatrix[i][j])
+		}
+		fmt.Println()
+	}
+	fmt.Println()
 
 	g.TravelTimeMatrix = travelTimeMatrix
 	g.TravelPathMatrix = travelPathMatrix
@@ -276,46 +321,119 @@ func (g *Graph) TrackCommonDestinationPackages() {
 	}
 }
 
-func (g *Graph) MoveToStation(train *Train, fromStationId StationId, toStationId StationId) {
-	moves := make([]Move, 0)
-	fmt.Printf("getting moves from station %s to station %s...\n", g.StationNames[fromStationId], g.StationNames[toStationId])
-
+func (g *Graph) MoveToPickupPackage(train Train, nearestPackage Package) {
+	paths := make([]StationId, 0)
 	// https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm#Path_reconstruction
-	start := fromStationId
-	var prev StationId
-	end := toStationId
+	start := train.CurrentStationId
+	end := nearestPackage.StartingStationId
 
-	// moves = append(moves, Move{
-	// 	Train:           *train,
-	// 	StartingStation: *g.Stations[prev],
-	// 	EndingStation:   *g.Stations[end],
-	// })
+	paths = append(paths, end)
 	for start != end {
-		prev = end
 		end = g.TravelPathMatrix[start][end]
-		// fmt.Println(g.Stations[prev].Name, g.Stations[end].Name)
-		fmt.Printf("Train %s moving from station %s to station %s with no packages carried\n", train.Name, g.Stations[prev].Name, g.Stations[end].Name)
-		moves = append(moves, Move{
-			Train:           *train,
-			StartingStation: *g.Stations[prev],
-			EndingStation:   *g.Stations[end],
-		})
+
+		paths = append(paths, end)
 	}
 
-	slices.Reverse(moves)
+	slices.Reverse(paths)
+
+	fmt.Printf("moving from %s station to %s station\n", g.StationNames[start], g.StationNames[end])
+	fmt.Printf("%+v\n", paths)
+
+	moves := make([]Move, 0)
+	currentTravelTime := g.Trains[train.Name].TravelTime
+	for i := 0; i < len(paths)-1; i++ {
+		// fmt.Printf("%s station to %s station => %d minutes\n", move.StartingStation.Name, move.EndingStation.Name, move.TravelTime)
+		currentStationId := paths[i]
+		nextStationId := paths[i+1]
+
+		moves = append(moves, Move{
+			TravelTime:      currentTravelTime,
+			Train:           train,
+			StartingStation: *g.Stations[currentStationId],
+			EndingStation:   *g.Stations[nextStationId],
+			PackagesCarried: g.Trains[train.Name].PackagesCarried,
+		})
+		currentTravelTime += g.TravelTimeMatrix[currentStationId][nextStationId]
+	}
+	g.Trains[train.Name].TravelTime = currentTravelTime
+	g.Trains[train.Name].UpdatePosition(nearestPackage.StartingStationId)
+	g.Trains[train.Name].AddPackage(nearestPackage)
+	// moves[len(moves)-1].PackagesCarried = append(g.Trains[train.Name].PackagesCarried, nearestPackage)
+	g.Moves = append(g.Moves, moves...)
+}
+
+func (g *Graph) MoveToDropPackage(train Train, packages []Package, destinationStationId int) {
+	paths := make([]StationId, 0)
+	fmt.Printf("dropping from %s station to %s station\n", g.StationNames[train.CurrentStationId], g.StationNames[destinationStationId])
+	// https://en.wikipedia.org/wiki/Floyd%E2%80%93Warshall_algorithm#Path_reconstruction
+	start := g.Trains[train.Name].CurrentStationId
+	end := destinationStationId
+
+	paths = append(paths, end)
+
+	for start != end {
+		end = g.TravelPathMatrix[start][end]
+		paths = append(paths, end)
+	}
+
+	slices.Reverse(paths)
+
+	totalDroppedWeight := 0
+	for _, delivery := range packages {
+		totalDroppedWeight += delivery.Weight
+	}
+
+	moves := make([]Move, 0)
+	currentTravelTime := g.Trains[train.Name].TravelTime
+	for i := 0; i < len(paths)-1; i++ {
+		// fmt.Printf("%s station to %s station => %d minutes\n", move.StartingStation.Name, move.EndingStation.Name, move.TravelTime)
+		currentStationId := paths[i]
+		nextStationId := paths[i+1]
+		moves = append(moves, Move{
+			TravelTime:      currentTravelTime,
+			Train:           train,
+			StartingStation: *g.Stations[currentStationId],
+			EndingStation:   *g.Stations[nextStationId],
+			PackagesCarried: g.Trains[train.Name].PackagesCarried,
+		})
+		currentTravelTime += g.TravelTimeMatrix[currentStationId][nextStationId]
+	}
+
+	g.Trains[train.Name].TravelTime = currentTravelTime
+	g.Trains[train.Name].UpdatePosition(destinationStationId)
+
+	fmt.Printf("dropped packages: %+v\n", packages)
+	g.Trains[train.Name].RemoveDroppedPackages(packages)
+	// have to update again, since RemoveDroppedPackages will filter out some of the carried packages that are dropped
+	moves[len(moves)-1].PackagesCarried = g.Trains[train.Name].PackagesCarried
+	moves[len(moves)-1].PackagesDropped = packages
 	g.Moves = append(g.Moves, moves...)
 }
 
 func (g *Graph) PrintMoves() {
+	// sort by train to easily track moves per train
+	slices.SortStableFunc(g.Moves, func(a Move, b Move) int {
+		return strings.Compare(a.Train.Name, b.Train.Name)
+	})
 	for _, move := range g.Moves {
-		if len(move.Train.PackagesCarried) > 0 {
-			fmt.Printf("Train %s moving from station %s to station %s carrying:\n", move.Train.Name, move.StartingStation.Name, move.EndingStation.Name)
-			for _, carriedPackage := range move.Train.PackagesCarried {
+		if move.TravelTime == 696969 {
+			fmt.Println("DROPOFF PHASE")
+			continue
+		}
+		fmt.Printf("[%d minutes] Train %s moving from station %s to station %s\n", move.TravelTime, move.Train.Name, move.StartingStation.Name, move.EndingStation.Name)
+		if len(move.PackagesCarried) > 0 {
+			fmt.Println("Carried packages:")
+			for _, carriedPackage := range move.PackagesCarried {
 				fmt.Printf("	- %s package with weight %d heading to %s station\n", carriedPackage.Name, carriedPackage.Weight, g.StationNames[carriedPackage.EndingStationId])
 			}
-		} else {
-			fmt.Printf("Train %s moving from station %s to station %s with no packages carried\n", move.Train.Name, move.StartingStation.Name, move.EndingStation.Name)
 		}
+		if len(move.PackagesDropped) > 0 {
+			fmt.Println("Droppped packages:")
+			for _, dropppedPackage := range move.PackagesDropped {
+				fmt.Printf("	- %s package with weight %d at %s station\n", dropppedPackage.Name, dropppedPackage.Weight, g.StationNames[dropppedPackage.EndingStationId])
+			}
+		}
+		fmt.Println()
 	}
 }
 
@@ -324,9 +442,17 @@ func (g *Graph) Deliver() {
 	undeliveredPackages := make([]Package, 0)
 	undeliveredPackages = append(undeliveredPackages, g.Deliveries...)
 
-	assignedTrains := make([]Train, 0)
 	unassignedTrains := make([]Train, 0)
-	unassignedTrains = append(unassignedTrains, g.Trains...)
+
+	// go returns the keys in random order, to make it determinstic we sort it ahead of time
+	trainNames := make([]string, 0, len(g.Trains))
+	for trainName := range g.Trains {
+		trainNames = append(trainNames, trainName)
+	}
+	slices.Sort(trainNames)
+	for _, trainName := range trainNames {
+		unassignedTrains = append(unassignedTrains, *g.Trains[trainName])
+	}
 
 	// if we haven't delivered all the packages yet
 	for len(undeliveredPackages) > 0 {
@@ -335,7 +461,8 @@ func (g *Graph) Deliver() {
 		// TODO: Handle a case where there are unassigned trains, but there are no more packages to pick up
 		for len(unassignedTrains) > 0 {
 			// undeliveredPackage, _ := undeliveredPackages[0], undeliveredPackages[1:]
-			train := unassignedTrains[0]
+			// TODO: Naivse solution, just take the first train, improve this
+			train := g.Trains[unassignedTrains[0].Name]
 
 			var nearestPackage *Package
 			var nearestPackageIndex int
@@ -365,48 +492,57 @@ func (g *Graph) Deliver() {
 
 			if nearestPackage == nil {
 				// NOTE: this train cannot pick up anymore packages, might be too heavy or its already filled with pickups
-				// TODO: Handle this case
+				// TODO: Handle this case (this is done already?)
 				unassignedTrains = unassignedTrains[1:]
 				continue
 			}
 
-			g.MoveToStation(&train, train.CurrentStationId, nearestPackage.StartingStationId)
-
-			unassignedTrains[0].CurrentStationId = nearestPackage.StartingStationId
-			unassignedTrains[0].Capacity = train.Capacity - nearestPackage.Weight
-			unassignedTrains[0].PackagesCarried = append(unassignedTrains[0].PackagesCarried, nearestPackage)
-
-			var isAdded bool
-			for j := 0; j < len(assignedTrains); j++ {
-				if assignedTrains[j].Name == train.Name {
-					isAdded = true
-					assignedTrains[j].CurrentStationId = nearestPackage.StartingStationId
-					assignedTrains[j].Capacity = train.Capacity - nearestPackage.Weight
-					assignedTrains[j].PackagesCarried = append(assignedTrains[j].PackagesCarried, nearestPackage)
-					break
-				}
-			}
-			if !isAdded {
-				assignedTrains = append(assignedTrains, unassignedTrains[0])
-			}
+			g.MoveToPickupPackage(*train, *nearestPackage)
 
 			undeliveredPackages = append(undeliveredPackages[:nearestPackageIndex], undeliveredPackages[nearestPackageIndex+1:]...)
 		}
+
+		g.Moves = append(g.Moves, Move{
+			TravelTime: 696969,
+		})
 
 		// at this point, all packages should have been picked up by some trains OR all trains have been packed
 		// we need the trains to deliver the packages to their destinations first, then the train can pick up more packages if needed
 		// NOTE: But we could have some other pakcages that has not been assigned yet, so we need the trains to drop them first :(
 		// NOTE: DROPOFF phase
+		assignedTrains := make([]Train, 0)
+		trainNames := make([]string, 0, len(g.Trains))
+		for trainName := range g.Trains {
+			trainNames = append(trainNames, trainName)
+		}
+		slices.Sort(trainNames)
+		for _, trainName := range trainNames {
+			train := g.Trains[trainName]
+			if len(train.PackagesCarried) > 0 {
+				assignedTrains = append(assignedTrains, *train)
+			}
+		}
+
 		for len(assignedTrains) > 0 {
 			assignedTrain := assignedTrains[0]
 			assignedTrains = assignedTrains[1:]
 
-			// for each package to be delivered for this train, choose the package that can be delivered earliest (use the matrix)
-			for _, carriedPackage := range assignedTrain.PackagesCarried {
-				g.MoveToStation(&assignedTrain, assignedTrain.CurrentStationId, carriedPackage.EndingStationId)
-				deliveredPackages = append(deliveredPackages, *carriedPackage)
+			// track common destination packages
+			packagesByDestinationMap := make(map[StationId][]Package, 0)
+			for _, packageCarried := range assignedTrain.PackagesCarried {
+				if _, exists := packagesByDestinationMap[packageCarried.EndingStationId]; !exists {
+					packagesByDestinationMap[packageCarried.EndingStationId] = make([]Package, 0)
+				}
+				packagesByDestinationMap[packageCarried.EndingStationId] = append(packagesByDestinationMap[packageCarried.EndingStationId], packageCarried)
 			}
-			assignedTrain.PackagesCarried = []*Package{}
+
+			// for each package to be delivered for this train, choose the package that can be delivered earliest (use the matrix)
+			for packageDestinationStationId, carriedPackages := range packagesByDestinationMap {
+				g.MoveToDropPackage(assignedTrain, carriedPackages, packageDestinationStationId)
+
+				deliveredPackages = append(deliveredPackages, carriedPackages...)
+			}
+			assignedTrain.PackagesCarried = []Package{}
 		}
 
 	}
