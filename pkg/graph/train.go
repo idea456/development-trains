@@ -1,7 +1,6 @@
 package graph
 
 import (
-	"fmt"
 	"slices"
 )
 
@@ -19,8 +18,20 @@ func (train *Train) AddPackage(delivery Package) {
 }
 
 func (train *Train) UpdatePosition(newStationId StationId) {
-	fmt.Println("updating train position to station", newStationId)
 	train.CurrentStationId = newStationId
+}
+
+func (train *Train) DropPackages() []Package {
+	droppedPackages := make([]Package, 0)
+	for _, carriedPackage := range train.PackagesCarried {
+		if train.CurrentStationId == carriedPackage.EndingStationId {
+			droppedPackages = append(droppedPackages, carriedPackage)
+		}
+	}
+	if len(droppedPackages) > 0 {
+		train.RemovePackages(droppedPackages)
+	}
+	return droppedPackages
 }
 
 func (train *Train) RemovePackages(droppedPackages []Package) {

@@ -9,14 +9,16 @@ import (
 )
 
 type Printer struct {
-	Moves        []Move
-	StationNames map[StationId]string
+	Moves            []Move
+	StationNames     map[StationId]StationName
+	TravelTimeMatrix map[StationId]map[StationId]int
 }
 
-func NewPrinter(moves []Move, stationNames map[StationId]string) *Printer {
+func NewPrinter(moves []Move, stationNames map[StationId]string, travelTimeMatrix map[StationId]map[StationId]int) *Printer {
 	return &Printer{
-		Moves:        moves,
-		StationNames: stationNames,
+		Moves:            moves,
+		StationNames:     stationNames,
+		TravelTimeMatrix: travelTimeMatrix,
 	}
 }
 
@@ -40,6 +42,7 @@ func (printer *Printer) PrintMoves() {
 
 		fmt.Printf("W=%d, T=%s, N1=%s, P1=%s, N2=%s, P2=%s\n", move.TimeTaken, move.Train.Name, move.StartingStation.Name, packageCarriedStr, move.EndingStation.Name, packageDroppedStr)
 	}
+	fmt.Println()
 }
 
 func (printer *Printer) PrintMovesVerbose() {
@@ -56,13 +59,14 @@ func (printer *Printer) PrintMovesVerbose() {
 			}
 		}
 		if len(move.PackagesDropped) > 0 {
-			fmt.Println("Droppped packages:")
+			fmt.Println("Dropped packages:")
 			for _, dropppedPackage := range move.PackagesDropped {
 				fmt.Printf("	- %s package with weight %d at %s station\n", dropppedPackage.Name, dropppedPackage.Weight, printer.StationNames[dropppedPackage.EndingStationId])
 			}
 		}
 		fmt.Println()
 	}
+	fmt.Println()
 }
 
 func (printer *Printer) PrintSummary() {
@@ -81,7 +85,8 @@ func (printer *Printer) PrintSummary() {
 
 	for _, move := range movesWithDeliveredPackages {
 		for _, deliveredPackage := range move.PackagesDropped {
-			fmt.Fprintf(w, "%s\t%dkg\t%dm\t%s\t\n", deliveredPackage.Name, deliveredPackage.Weight, move.TimeTaken, move.Train.Name)
+			travelTime := printer.TravelTimeMatrix[move.StartingStation.Id][move.EndingStation.Id]
+			fmt.Fprintf(w, "%s\t%dkg\t%dm\t%s\t\n", deliveredPackage.Name, deliveredPackage.Weight, move.TimeTaken+travelTime, move.Train.Name)
 		}
 	}
 	w.Flush()

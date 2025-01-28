@@ -1,37 +1,76 @@
-Maybe a greedy method first?
-Iterate through each package, for each package:
+# Development Trains
 
--   Assign a train that is closest to it first
-    -   The train must have enough capacity to fit it
-    -   Execute the plan
-    -   Once the train picks up the train, can the train have more capacity to pick up more packages?
-        -   If yes, find the next nearest package which the train can pick up that fits its capacity
-            -   But what if its better to just drop the packages first, since the train could be near the drop site already?
-            -   We can have another train pick up that package
-            -   2 decisions, both depends which route to them has the least travel time:
-                -   MinTravelTime(Pick up another package from X station to Z station, Drop off a package from X station to Y station)
-        -   If no:
-            -   execute the plan to deliver the packages first to their destinations
-            -   find the next package that is nearest to a train that can pick it up
+## Installation
 
-Iterate through each train, for each train:
+To run the project locally, you will need to have Go with at least version 1.23.1 installed. After that, you may build the source using:
 
-Train assignment for different packages
+```bash
+go build -o development-trains ./cmd/main.go
+```
 
--   pickup, or dropoff?
-    -   pickup when we have a nearest package
-    -   dropoff if the trains are near a drop site (only possible if the trains are carrying a load)
-        -   need to keep track of all packages that have been carried, and check their distance from their drop destinations
--   keep track of packages that have not been picked up in a priority queue
-    -   or can track nearest trains
--   keep track of packages that have been pciked up in a priroity queue
-    -   2 packages with the same weight, different routes, which one to pickup?
-        -   does the train have a destination to go?
-            -   If yes, pick the route that is going to the same destination, along the shortest path
-            -   If no, pick any route (TODO: optimize this)
-    -   ## Group packages with similar destination?
+If you don't have Go installed, you can use Docker to build and run the project locally. You must first build the Docker image by:
 
-Simulate each train's journey to destination, pick the route with the highest pickup/dropoff rate?
+```bash
+docker build -t idea456:development-trains .
+```
 
-Priority queue for packages, prioritize packages with most similar destinations
-Priority queue for trains with most weight first
+This will create an image called `idea456:development-trains` which contains the build output of the source.
+
+## Usage
+
+To run the program, you must specify a file path to the input path first by using the `-i` flag:
+
+```
+./development-trains -i ./tests/sample.txt
+```
+
+If using a Docker image, you can run this example command with a file path to your local environment holding the test files:
+
+```bash
+docker run -v $(pwd)/tests:/tests idea456:development-trains -i /tests/sample.txt
+```
+
+This will return a list of moves with the specified format:
+
+```
+W=0, T=Q1, N1=B, P1=[], N2=A, P2=[]
+W=30, T=Q1, N1=A, P1=[K1], N2=B, P2=[]
+W=60, T=Q1, N1=B, P1=[], N2=C, P2=[K1]
+```
+
+To print out a more detailed list of moves, you may specify the `--verbose` flag which will print out the moves and steps taken by each train:
+
+```bash
+./development-trains -i ./tests/sample.txt --verbose
+```
+
+which returns the following output:
+
+```
+[0 minutes] Train Q1 moving from station B to station A
+
+[30 minutes] Train Q1 moving from station A to station B
+Carried packages:
+	- K1 package with weight 5 heading to C station
+
+[60 minutes] Train Q1 moving from station B to station C
+Dropped packages:
+	- K1 package with weight 5 at C station
+```
+
+To include a summary of time taken for each package to be delivered, you can specify the `--summary` flag:
+
+```bash
+./development-trains -i ./tests/sample.txt --summary
+```
+
+which returns the following output:
+
+```
+W=0, T=Q1, N1=B, P1=[], N2=A, P2=[]
+W=30, T=Q1, N1=A, P1=[K1], N2=B, P2=[]
+W=60, T=Q1, N1=B, P1=[], N2=C, P2=[K1]
+
+Name Weight DeliveredAt Train
+K1   5kg    60m         Q1
+```

@@ -1,7 +1,7 @@
 build:
 	go build -o development-trains ./cmd/main.go
 test:
-	./development-trains ./tests/sample.txt
+	./development-trains -i ./tests/sample.txt --summary
 test1:
 	./development-trains ./tests/test1.txt
 dev:
