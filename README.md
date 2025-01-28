@@ -8,6 +8,7 @@ To run the project locally, you will need to have Go with at least version 1.23.
 make build
 ```
 
+The latest binary source should
 If you don't have Go installed and need to build the source, you can use Docker to build and run the project locally. You can build the Docker image using:
 
 ```bash
@@ -30,7 +31,32 @@ If using a Docker image, you can run this example command with a file path to yo
 docker run -v <path to your test folder containing test files>:/tests idea456:development-trains -i /tests/<name of test file>.txt
 ```
 
-This will return a list of moves with the specified format:
+You may also choose to prompt for the input instead using the `--prompt` flag without the `-i` flag, it will prompt and output:
+
+```bash
+Enter the number of stations:
+3
+Enter the stations (one per line):
+A
+B
+C
+Enter the number of routes:
+2
+Enter the routes (one per line, format: E1,A,B,10):
+E1,A,B,30
+E2,B,C,10
+Enter the number of packages:
+1
+Enter the packages (one per line, format: K1,3,A,E):
+K1,5,A,C
+Enter the number of trains:
+1
+Enter the trains (one per line, format: Q1,3,A):
+Q1,6,B
+
+```
+
+Using either input method will return a list of moves with the specified format:
 
 ```
 W=0, T=Q1, N1=B, P1=[], N2=A, P2=[]
