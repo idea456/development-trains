@@ -8,11 +8,12 @@ import (
 	"strings"
 )
 
-const MaxInt = 999999999999
-
 type StationId = int
 type StationName = string
 type PackageName = string
+
+// temporary use a large number to represent integer infinity
+const MaxInt = 9999999999999
 
 // Package struct represents the package to be delivered
 type Package struct {
@@ -385,7 +386,6 @@ func (g *Graph) Deliver() error {
 			assignableTrain := heap.Pop(trainsQueue).(Train)
 			train := g.Trains[assignableTrain.Name]
 
-			// TODO: Can use a custom heap here
 			slices.SortFunc(undeliveredPackages, func(packageX, packageY Package) int {
 				// first sort by their package pickup distance from the train
 				packageXDistanceToTrain := g.TravelTimeMatrix[train.CurrentStationId][packageX.StartingStationId]
@@ -393,12 +393,8 @@ func (g *Graph) Deliver() error {
 				if packageXDistanceToTrain != packageYDistanceToTrain {
 					return packageXDistanceToTrain - packageYDistanceToTrain
 				} else {
-					// otherwise, sort them by their weight, higher weight goes up first
-					if packageX.Weight < packageY.Weight {
-						return 1
-					} else {
-						return -1
-					}
+					// this will encourage the sorting to group up packages with similar destinations together
+					return packageX.EndingStationId - packageY.EndingStationId
 				}
 
 			})
@@ -418,15 +414,15 @@ func (g *Graph) Deliver() error {
 			// if this train can still pick up more packages, we can be greedy and try to take up more packages
 			// NOTE: This solves the issue of assigning packages with common destinations since undeliveredPackages is already sorted by destinations
 			// TODO: Find a way to optimize this, this is a very greedy solution, what if there are other trains that can pick this up?
-			for g.Trains[train.Name].Capacity > 0 && len(undeliveredPackages) > 0 {
-				nearestPackage = undeliveredPackages[0]
-				if nearestPackage.Weight > g.Trains[train.Name].Capacity {
-					break
-				}
+			// for g.Trains[train.Name].Capacity > 0 && len(undeliveredPackages) > 0 {
+			// 	nearestPackage = undeliveredPackages[0]
+			// 	if nearestPackage.Weight > g.Trains[train.Name].Capacity {
+			// 		break
+			// 	}
 
-				g.MoveToPickupPackage(*train, nearestPackage)
-				undeliveredPackages = undeliveredPackages[1:]
-			}
+			// 	g.MoveToPickupPackage(*train, nearestPackage)
+			// 	undeliveredPackages = undeliveredPackages[1:]
+			// }
 		}
 
 		// at this point, all packages should have been picked up by some trains OR all trains have been packed

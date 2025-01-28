@@ -16,12 +16,15 @@ func (q *TrainsQueue) Pop() interface{} {
 	return last
 }
 
-// NOTE: trains with higher capacity has higher priority
 func (q TrainsQueue) Less(i, j int) bool {
-	// if q[i].Capacity == q[j].Capacity {
-	// 	return len(q[i].PackagesCarried) < len(q[j].PackagesCarried)
-	// }
-	return q[i].Capacity >= q[j].Capacity
+	// // NOTE: first prioritize trains that carries less packages first to encourage and diversify other trains to pick this up instead
+	// // then prioritize trains that has a bigger capacity to carry more packages
+	if len(q[i].PackagesCarried) == len(q[j].PackagesCarried) {
+		// prioritize trains that has a bigger capacity to carry more packages
+		return q[i].Capacity > q[j].Capacity
+	}
+	// prioritize trains that carries less packages first to encourage and diversify other trains to pick this up instead
+	return len(q[i].PackagesCarried) < len(q[j].PackagesCarried)
 }
 
 func (q TrainsQueue) Swap(i, j int) {
