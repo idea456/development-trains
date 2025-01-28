@@ -31,6 +31,32 @@ If using a Docker image, you can run this example command with a file path to yo
 docker run -v <path to your test folder containing test files>:/tests idea456:development-trains -i /tests/<name of test file>.txt
 ```
 
+If choosing to input from a text file, ensure that it is following the format:
+
+```
+2 // number of stations
+A
+B
+
+6 // number of routes
+E1,A,B,10
+E2,A,C,20
+E3,B,D,10
+E4,C,D,30
+E5,D,E,10
+E6,D,F,10
+
+4 // number of packages
+K1,1,A,E
+K2,1,B,E
+K3,1,D,E
+K4,3,C,F
+
+2 // number of trains
+Q1,3,A
+Q2,3,A
+```
+
 You may also choose to prompt for the input instead using the `--prompt` flag without the `-i` flag, it will prompt and output:
 
 ```bash
