@@ -5,13 +5,13 @@
 To run the project locally, you will need to have Go with at least version 1.23.1 installed. After that, you may build the source using:
 
 ```bash
-go build -o development-trains ./cmd/main.go
+make build
 ```
 
-If you don't have Go installed, you can use Docker to build and run the project locally. You must first build the Docker image by:
+If you don't have Go installed and need to build the source, you can use Docker to build and run the project locally. You can build the Docker image using:
 
 ```bash
-docker build -t idea456:development-trains .
+make build-image
 ```
 
 This will create an image called `idea456:development-trains` which contains the build output of the source.
@@ -27,7 +27,7 @@ To run the program, you must specify a file path to the input path first by usin
 If using a Docker image, you can run this example command with a file path to your local environment holding the test files:
 
 ```bash
-docker run -v $(pwd)/tests:/tests idea456:development-trains -i /tests/sample.txt
+docker run -v <path to your test folder containing test files>:/tests idea456:development-trains -i /tests/<name of test file>.txt
 ```
 
 This will return a list of moves with the specified format:

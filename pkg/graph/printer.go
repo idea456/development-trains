@@ -8,6 +8,7 @@ import (
 	"text/tabwriter"
 )
 
+// Printer represents a helper struct to print out moves and information for each train's moves and packages
 type Printer struct {
 	Moves            []Move
 	StationNames     map[StationId]StationName
@@ -22,8 +23,9 @@ func NewPrinter(moves []Move, stationNames map[StationId]string, travelTimeMatri
 	}
 }
 
+// Prints out the list of moves as specified by assignment requirements in the format of:
+// W=0, T=Q1, N1=B, P1=[], N2=A, P2=[]
 func (printer *Printer) PrintMoves() {
-	// W=0, T=Q1, N1=B, P1=[], N2=A, P2=[]
 	slices.SortStableFunc(printer.Moves, func(a Move, b Move) int {
 		return strings.Compare(a.Train.Name, b.Train.Name)
 	})
@@ -45,6 +47,7 @@ func (printer *Printer) PrintMoves() {
 	fmt.Println()
 }
 
+// Prints out the list of moves each train takes in a more detailed format
 func (printer *Printer) PrintMovesVerbose() {
 	// sort by train to easily track moves per train
 	slices.SortStableFunc(printer.Moves, func(a Move, b Move) int {
@@ -69,6 +72,7 @@ func (printer *Printer) PrintMovesVerbose() {
 	fmt.Println()
 }
 
+// Prints an overall summary for each package's delivery time as well as which train delivered it
 func (printer *Printer) PrintSummary() {
 	// sort by train to easily track moves per train
 	slices.SortStableFunc(printer.Moves, func(a Move, b Move) int {
